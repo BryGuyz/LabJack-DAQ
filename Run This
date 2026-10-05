@@ -1,0 +1,112 @@
+from labjack import ljm
+import csv
+import time
+from datetime import datetime
+import os
+
+# SETTINGS
+FILE_NAME = "LabJack_Data.csv"
+
+# Time between measurements, seconds
+SAMPLE_INTERVAL = 5
+
+channels = ["AIN0", "AIN1", "AIN2"]
+
+# SENSOR CONVERSION FUNCTIONS
+def position_conversion(voltage):
+    position_mm = 100 * voltage
+    return position_mm
+
+def pressure_conversion(voltage):
+    pressure_psi = 50 * voltage
+    return pressure_psi
+
+def strain_conversion(voltage):
+    strain_microstrain = 1000 * voltage
+    return strain_microstrain
+
+
+# CONNECT TO LABJACK
+handle = ljm.openS("T4", "USB", "ANY")
+
+print("Connected to LabJack")
+
+# CREATE/OPEN CSV FILE
+file_exists = os.path.exists(FILE_NAME)
+
+with open(FILE_NAME, "a", newline="") as file:
+
+    writer = csv.writer(file)
+
+    # Add column names if this is a new file
+    if not file_exists:
+        writer.writerow([
+            "Timestamp",
+            "AIN0 Voltage (V)",
+            "Position (mm)",
+            "AIN1 Voltage (V)",
+            "Pressure (psi)",
+            "AIN2 Voltage (V)",
+            "Strain (microstrain)"
+        ])
+
+    try:
+
+        while True:
+
+            # Read all 3 inputs
+            voltages = ljm.eReadNames(
+                handle,
+                len(channels),
+                channels
+            )
+
+            V_position = voltages[0]
+            V_pressure = voltages[1]
+            V_strain = voltages[2]
+
+            # Convert voltage to real measurements
+            position = position_conversion(V_position)
+            pressure = pressure_conversion(V_pressure)
+            strain = strain_conversion(V_strain)
+
+            # Get current date/time
+            timestamp = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            # Write one row
+            writer.writerow([
+                timestamp,
+                V_position,
+                position,
+                V_pressure,
+                pressure,
+                V_strain,
+                strain
+            ])
+
+            # Make sure data actually gets written
+            file.flush()
+
+            # Display current values
+            print(
+                f"{timestamp} | "
+                f"Position: {position:.2f} mm | "
+                f"Pressure: {pressure:.2f} psi | "
+                f"Strain: {strain:.2f} µε"
+            )
+
+            # Wait before next measurement
+            time.sleep(SAMPLE_INTERVAL)
+
+
+    except KeyboardInterrupt:
+
+        print("\nData collection stopped.")
+
+
+    finally:
+
+        ljm.close(handle)
+        print("LabJack disconnected.")
